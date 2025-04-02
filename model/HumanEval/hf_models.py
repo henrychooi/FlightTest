@@ -44,8 +44,6 @@ def generate_samples(k, model_dir, sample_file):
 
     print("Model loaded.")
 
-    # Lists to store test cases and predictions
-    test_cases = []
     candidates = []
 
     problems = list(stream_jsonl(DATASET_DIR))
@@ -53,11 +51,6 @@ def generate_samples(k, model_dir, sample_file):
     print("Generating code solutions...")
     for _, problem in tqdm(enumerate(problems), total=len(problems), desc="Running inference...", unit="problem"):
         prompt = problem['prompt']
-        test_code = problem.get('test', '')
-        if test_code:
-            test_code = _clean_metadata(test_code)
-        # Store the test cases
-        test_cases.append(test_code)
 
         # Generate multiple candidate solutions for each problem
         problem_candidates = []
