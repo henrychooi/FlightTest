@@ -1,4 +1,3 @@
-import argparse
 import json
 import os
 import time
@@ -72,8 +71,16 @@ TASKS = [
 choices = ["A", "B", "C", "D"]
 
 class MMLUEvaluator(BaseEvaluator):
-    def compute_metric(output_filename):
-        with open(output_filename, 'r') as f:
+    def __init__(self, model_path, data_path, prompt_path, output_path, param_size, model_type, ntrain):
+        super().__init__(model_path, data_path, prompt_path)
+        self.output_path = output_path
+        self.param_size = param_size
+        self.model_type = model_type
+        self.ntrain = ntrain
+
+
+    def _compute_metric(self, output_file):
+        with open(output_file, 'r') as f:
             run_results = json.load(f)
         total_acc = 0
         total_num = 0
@@ -89,14 +96,14 @@ class MMLUEvaluator(BaseEvaluator):
         print("ACC-all: %.4f" % (total_acc/total_num))
 
 
-    def format_subject(subject):
+    def _format_subject(self, subject):
         l = subject.split("_")
         s = ""
         for entry in l:
             s += " " + entry
         return s
 
-    def format_example(df, idx, include_answer=True):
+    def _format_example(self, df, idx, include_answer=True):
         prompt = df.iloc[idx, 0]
         k = df.shape[1] - 2
         for j in range(k):
@@ -106,12 +113,12 @@ class MMLUEvaluator(BaseEvaluator):
             prompt += " {}\n\n".format(df.iloc[idx, k + 1])
         return prompt
 
-    def gen_prompt(train_df, subject, k=-1):
-        prompt = "The following are multiple choice questions (with answers) about {}.\n\n".format(format_subject(subject))
+    def _gen_prompt(self, train_df, subject, k=-1):
+        prompt = "The following are multiple choice questions (with answers) about {}.\n\n".format(self._format_subject(subject))
         if k == -1:
             k = train_df.shape[0]
         for i in range(k):
-            prompt += format_example(train_df, i)
+            prompt += self._format_example(train_df, i)
         return prompt
 
 
@@ -119,7 +126,7 @@ class MMLUEvaluator(BaseEvaluator):
     #     stop_ids = [29871, 13, 13] # \n\n 
     #     return input_ids[-len(stop_ids)]
 
-    def prepare_input(tokenizer, prompts):
+    def _prepare_input(self, tokenizer, prompts):
         input_tokens = tokenizer.batch_encode_plus(prompts, return_tensors="pt", padding=True)
         input_tokens = {k:input_tokens[k] for k in input_tokens if k in ["input_ids", "attention_mask"]}
         for t in input_tokens:
@@ -128,7 +135,7 @@ class MMLUEvaluator(BaseEvaluator):
 
         return input_tokens
 
-    def load(ckpt_dir, model_type):
+    def _load(self, ckpt_dir, model_type):
         n_gpus = torch.cuda.device_count()
 
         if model_type == 'llama':
@@ -158,7 +165,7 @@ class MMLUEvaluator(BaseEvaluator):
 
         return model, tokenizer
 
-    def batch_split(prompts, batch_num):
+    def _batch_split(self, prompts, batch_num):
         batch_prompts = []
         mini_batch = []
         for prompt in prompts:
@@ -170,33 +177,33 @@ class MMLUEvaluator(BaseEvaluator):
             batch_prompts.append(mini_batch)
         return batch_prompts
 
-    def batch_infer(model, tokenizer, prompts):
+    def _batch_infer(self, model, tokenizer, prompts):
         batch_size = 8
         answers = []
-        for batch_input in tqdm(batch_split(prompts, batch_size)):
-            encode_inputs = prepare_input(tokenizer, batch_input)
+        for batch_input in tqdm(self._batch_split(prompts, batch_size)):
+            encode_inputs = self._prepare_input(tokenizer, batch_input)
             outputs = model.generate(**encode_inputs, max_new_tokens=1, pad_token_id=tokenizer.pad_token_id)
             answers.extend(tokenizer.batch_decode(outputs, skip_special_tokens=True))
         answers = [answer[-1] for answer in answers]
         return answers
 
-    def evaluate_model(ckpt_dir: str, param_size: str, model_type: str):
+    def evaluate_model(self):
         
         run_results = {}
-        output_filename = 'run_results_%s_%sb.json' % (model_type, param_size)
+        output_filename = self.output_path + 'run_results_%s_%sb.json' % (self.model_type, self.param_size)
         
-        model, tokenizer = load(ckpt_dir, model_type)
+        model, tokenizer = self._load(self.model_path, self.model_type)
         start_time = time.time()
         for task in TASKS:
             print('Testing %s ...' % task)
             records = []
-            dev_df = pd.read_csv(os.path.join(args.data_dir, "dev", task + "_dev.csv"), header=None)[:args.ntrain]
-            test_df = pd.read_csv(os.path.join(args.data_dir, "test", task + "_test.csv"), header=None)
+            dev_df = pd.read_csv(os.path.join(self.data_path, "dev", task + "_dev.csv"), header=None)[:self.ntrain]
+            test_df = pd.read_csv(os.path.join(self.data_path, "test", task + "_test.csv"), header=None)
             for i in range(test_df.shape[0]):
                 # get prompt and make sure it fits
-                k = args.ntrain
-                prompt_end = format_example(test_df, i, include_answer=False)
-                train_prompt = gen_prompt(dev_df, task, k)
+                k = self.ntrain
+                prompt_end = self._format_example(test_df, i, include_answer=False)
+                train_prompt = self._gen_prompt(dev_df, task, k)
                 prompt = train_prompt + prompt_end
                 while len(tokenizer.tokenize(prompt)) + 1> 2048: # bos token
                     prompt_split = prompt.split("\n\n")
@@ -205,12 +212,13 @@ class MMLUEvaluator(BaseEvaluator):
                 label = test_df.iloc[i, test_df.shape[1]-1]
                 records.append({'prompt':prompt, 'answer':label})
 
-            pred_answers = batch_infer(model, tokenizer, [record['prompt'] for record in records])
+            pred_answers = self._batch_infer(model, tokenizer, [record['prompt'] for record in records])
             gold_answers = [record['answer'] for record in records]
             run_results[task] = {'pred_answers':pred_answers, 'gold_answers':gold_answers}
         with open(output_filename, 'w') as f:
             json.dump(run_results, f, ensure_ascii=False, indent=2)
         
-        compute_metric(output_filename)
+        self._compute_metric(output_filename)
         end_time = time.time()
         print("total run time %.2f" % (end_time - start_time))
+        return None
