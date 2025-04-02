@@ -72,8 +72,7 @@ choices = ["A", "B", "C", "D"]
 
 class MMLUEvaluator(BaseEvaluator):
     def __init__(self, model_path, data_path, prompt_path, output_path, param_size, model_type, ntrain):
-        super().__init__(model_path, data_path, prompt_path)
-        self.output_path = output_path
+        super().__init__(model_path, data_path, prompt_path, output_path)
         self.param_size = param_size
         self.model_type = model_type
         self.ntrain = ntrain
@@ -131,7 +130,8 @@ class MMLUEvaluator(BaseEvaluator):
         input_tokens = {k:input_tokens[k] for k in input_tokens if k in ["input_ids", "attention_mask"]}
         for t in input_tokens:
             if torch.is_tensor(input_tokens[t]):
-                input_tokens[t] = input_tokens[t].to('cuda')
+                if torch.cuda.is_available():
+                    input_tokens[t] = input_tokens[t].to('cuda')
 
         return input_tokens
 
@@ -222,3 +222,7 @@ class MMLUEvaluator(BaseEvaluator):
         end_time = time.time()
         print("total run time %.2f" % (end_time - start_time))
         return None
+
+if __name__ == "__main__":
+    evaluator = MMLUEvaluator("/Users/kanyui/Desktop/FlightTest/model/llama-3.2-1B", "/Users/kanyui/Desktop/FlightTest/data/MMLU", "/Users/kanyui/Desktop/FlightTest/prompt/MMLU", "/Users/kanyui/Desktop/FlightTest/output/MMLU", 1, "llama", 5)
+    evaluator.evaluate_model()
