@@ -1,4 +1,4 @@
-from typing import Iterable, Dict
+from typing import Iterable, Dict, List
 import gzip
 import json
 import os
@@ -49,3 +49,16 @@ def write_jsonl(filename: str, data: Iterable[Dict], append: bool = False):
         with open(filename, mode) as fp:
             for x in data:
                 fp.write((json.dumps(x) + "\n").encode('utf-8'))
+
+def write_candidates_to_jsonl(candidates: List[str], output_file: str):
+        """
+        Writes a list of candidates to a jsonl file.
+        """
+        with open(os.path.join('data', output_file), 'w', encoding='utf-8') as f:
+            for i, candidate_list in enumerate(candidates):
+                for comp in candidate_list:
+                    entry = {
+                        "task_id": f"HumanEval/{i}",
+                        "completion": comp
+                    }
+                    f.write(json.dumps(entry) + '\n')
