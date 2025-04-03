@@ -1,1 +1,2 @@
 from .MMLUEvaluator import MMLUEvaluator
+from .HumanEvalEvaluator import HumanEvalEvaluator
