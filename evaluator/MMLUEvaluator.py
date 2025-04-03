@@ -143,7 +143,7 @@ class MMLUEvaluator(BaseEvaluator):
 
             tokenizer = AutoTokenizer.from_pretrained(ckpt_dir, use_fast=False, padding_side="left", legacy=False, local_files_only=True)
             
-            model = AutoModelForCausalLM.from_pretrained(ckpt_dir, low_cpu_mem_usage = True, torch_dtype=torch.float16)
+            model = AutoModelForCausalLM.from_pretrained(ckpt_dir, low_cpu_mem_usage = True, torch_dtype=torch.bfloat16)
             model = tp.tensor_parallel(model, [i for i in range(n_gpus)])
 
             tokenizer.pad_token_id = 0 if tokenizer.pad_token_id is None else tokenizer.pad_token_id
