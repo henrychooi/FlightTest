@@ -1,15 +1,90 @@
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Union, Iterable, Dict
+from typing import List, Union
 import itertools
-
 import numpy as np
-import tqdm
-
-from utils.HumanEval.data import DATASET_DIR, read_problems, stream_jsonl, write_jsonl
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from utils.HumanEval.extractor import extractor
+from prompt.HumanEval.prompts import SYSTEM_PROMPT
+from utils.HumanEval.data import DATASET_DIR, read_problems, stream_jsonl, write_jsonl, write_candidates_to_jsonl
 from utils.HumanEval.execution import check_correctness
 
+# Inference pipeline for HuggingFace models
+def generate_samples(k, model_dir, sample_file):
 
+    print("Loading model...")
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+
+    # Loads a pretrained model from the specified directory (if exists), otherwise pulls from HuggingFace
+    model = AutoModelForCausalLM.from_pretrained(
+        model_dir,
+        device_map="auto",
+        torch_dtype="bfloat16",
+    )
+
+    tokenizer.pad_token = tokenizer.eos_token
+
+    model.eval()
+
+    print("Model loaded.")
+
+    candidates = []
+
+    problems = list(stream_jsonl(DATASET_DIR))
+
+    print("Generating code solutions...")
+    for _, problem in tqdm(enumerate(problems), total=len(problems), desc="Running inference...", unit="problem"):
+        prompt = problem['prompt']
+
+        # Generate multiple candidate solutions for each problem
+        problem_candidates = []
+
+        # Create a progress bar for the inner loop (samples per problem)
+        with tqdm(total=k, desc="Sample", unit="sample", leave=False) as pbar:
+            for _ in range(k):
+                
+                # Prepare chat template
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ]
+                
+
+                formatted_prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+                inputs = tokenizer(formatted_prompt, return_tensors="pt", padding=True).to(device)
+                attention_mask = inputs['attention_mask']
+
+                with torch.no_grad():
+                    outputs = model.generate(inputs['input_ids'],
+                                            attention_mask=attention_mask,
+                                            max_new_tokens=512,
+                                            do_sample=True,
+                                            top_p=0.95,
+                                            temperature=0.2,
+                                            pad_token_id=tokenizer.pad_token_id,
+                                            eos_token_id=tokenizer.eos_token_id)
+                     
+                prompt_length = inputs['input_ids'].shape[1]
+
+                generated_code = tokenizer.decode(outputs[0][prompt_length:], skip_special_tokens=True)
+                    
+                extracted_code = extractor(generated_code)
+
+                problem_candidates.append(extracted_code)
+                pbar.update(1)
+            
+        # Add the candidates for the current problem
+        candidates.append(problem_candidates)
+
+    print("Code generation complete.")
+    write_candidates_to_jsonl(candidates, f"{sample_file}.jsonl")
+
+# Evaluation metrics
 def estimate_pass_at_k(
     num_samples: Union[int, List[int], np.ndarray],
     num_correct: Union[List[int], np.ndarray],
@@ -59,7 +134,7 @@ def evaluate_functional_correctness(
         results = defaultdict(list)
 
         print("Reading samples...")
-        for sample in tqdm.tqdm(stream_jsonl(sample_file)):
+        for sample in tqdm(stream_jsonl(sample_file)):
             task_id = sample["task_id"]
             completion = sample["completion"]
             args = (problems[task_id], completion, timeout, completion_id[task_id])
@@ -71,7 +146,7 @@ def evaluate_functional_correctness(
         assert len(completion_id) == len(problems), "Some problems are not attempted."
 
         print("Running test suites...")
-        for future in tqdm.tqdm(as_completed(futures), total=len(futures)):
+        for future in tqdm(as_completed(futures), total=len(futures)):
             result = future.result()
             results[result["task_id"]].append((result["completion_id"], result))
 
@@ -100,6 +175,6 @@ def evaluate_functional_correctness(
 
     out_file = sample_file + "_results.jsonl"
     print(f"Writing results to {out_file}...")
-    write_jsonl(out_file, tqdm.tqdm(combine_results(), total=n_samples))
+    write_jsonl(out_file, tqdm(combine_results(), total=n_samples))
 
     return pass_at_k
