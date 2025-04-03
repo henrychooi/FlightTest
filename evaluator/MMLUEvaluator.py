@@ -7,7 +7,7 @@ import tensor_parallel as tp
 import torch
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from BaseEvaluator import BaseEvaluator
+from .BaseEvaluator import BaseEvaluator
 
 TASKS = [
         'abstract_algebra',
