@@ -50,11 +50,11 @@ def write_jsonl(filename: str, data: Iterable[Dict], append: bool = False):
             for x in data:
                 fp.write((json.dumps(x) + "\n").encode('utf-8'))
 
-def write_candidates_to_jsonl(candidates: List[str], output_file: str):
+def write_candidates_to_jsonl(candidates: List[str], output_path: str):
         """
         Writes a list of candidates to a jsonl file.
         """
-        with open(os.path.join('data', output_file), 'w', encoding='utf-8') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             for i, candidate_list in enumerate(candidates):
                 for comp in candidate_list:
                     entry = {
