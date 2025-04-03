@@ -1,6 +1,9 @@
 from datasets import load_from_disk, load_dataset
+import os 
+import re
+import json
 
-def save_dataset(format: str = "jsonl"):
+def save_gsm8k(format: str = "jsonl"):
     """
     Saves the GSM8K dataset in the specified format.
 
@@ -19,7 +22,7 @@ def save_dataset(format: str = "jsonl"):
         print("Unsupported format. Use 'jsonl' or 'arrow'.")
 
 
-def load_gsm8k(format: str = "jsonl"):
+def load_gsm8k(path: str, format: str = "jsonl"):
     """
     Loads the GSM8K dataset from a specified format.
 
@@ -27,15 +30,34 @@ def load_gsm8k(format: str = "jsonl"):
     format (str): The format of the dataset to load. Options: "jsonl" or "arrow".
 
     Returns:
-    dataset (Dataset): The loaded dataset.
+    Tuple[Dataset, int]: The loaded dataset and its size.
     """
     if format == "jsonl":
-        dataset = load_dataset("json", data_files=r"gsm8k_jsonl/gsm8k_test.jsonl")
+        dataset = load_dataset("json", data_files=path, test_split="test")
         print("Loaded dataset from JSONL.")
     elif format == "arrow":
-        dataset = load_from_disk(r"gsm8k_arrow/test")
+        dataset = load_from_disk(path)
         print("Loaded dataset from Arrow format.")
     else:
-        raise ValueError("Unsupported format. Use 'jsonl' or 'arrow'.")
+        raise ValueError(f"Unsupported format '{format}'. Use 'jsonl' or 'arrow'.")
+    
+    datasize = len(dataset)
 
-    return dataset
+    return dataset, datasize
+
+def save_results(results, model_name, n_votes, temp, use_majority_vote):
+    os.makedirs('eval_results/few_shot', exist_ok=True)
+    
+    # model_name = model_name.split('/')[-1]    
+    model_name = re.sub(r'[^\w\-_\.]', '_', model_name.split('/')[-1])
+    result_file = f"eval_results/few_shot/{model_name}"
+    if use_majority_vote:
+        result_file += f"_maj1@{n_votes}_temp{temp}"
+    result_file += "_results.json"
+
+    try:
+        with open(result_file, 'w') as f:
+            json.dump(results, f, indent=4)
+        print(f"Results saved to {result_file}")
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"Error saving results: {e}")
