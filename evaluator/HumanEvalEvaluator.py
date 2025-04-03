@@ -1,13 +1,13 @@
-from collections import defaultdict, Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Union
+import torch
 import itertools
 import numpy as np
 from tqdm import tqdm
+from typing import List, Union
+from collections import defaultdict, Counter
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
-from utils.HumanEval.extractor import extractor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from prompt.HumanEval.prompts import SYSTEM_PROMPT
+from utils.HumanEval.extractor import extractor
 from utils.HumanEval.data import DATASET_DIR, read_problems, stream_jsonl, write_jsonl, write_candidates_to_jsonl
 from utils.HumanEval.execution import check_correctness
 
