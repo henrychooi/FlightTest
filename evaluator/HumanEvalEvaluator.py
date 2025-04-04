@@ -54,7 +54,6 @@ class HumanEvalEvaluator(BaseEvaluator):
 
         # sanity checks to not waste time on invalid parameters
         assert self.num_samples > 0, "num_samples must be greater than 0."
-        assert os.path.exists(self.model_path), f"Model path {self.model_path} does not exist."
         assert os.path.exists(self.data_path), f"Data path {self.data_path} does not exist."
         assert os.path.exists(self.output_path), f"Output path {self.output_path} does not exist."
 
