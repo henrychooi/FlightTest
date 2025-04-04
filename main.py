@@ -21,8 +21,9 @@ def main(evaluator: str, **kwargs):
             # TODO: Fill in
             pass
         case "humaneval":
+            # If output or data path not specified, set default values
             if 'output_path' not in kwargs or kwargs['output_path'] is None:
-                kwargs['output_path'] = os.path.join("data", "HumanEval", "results")
+                kwargs['output_path'] = os.path.join("output", "HumanEval")
             
             if 'data_path' not in kwargs or kwargs['data_path'] is None:
                 kwargs['data_path'] = HUMANEVAL_DATASET_DIR
