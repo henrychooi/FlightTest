@@ -36,6 +36,21 @@ class HumanEvalEvaluator(BaseEvaluator):
             _||_||_         
             -- --           It is strongly recommended to check all parameters above before proceeding.
         """)
+        print(rf"""
+        ***************************************************************************************
+        *                                       WARNING!                                      *
+        *                                                                                     *
+        *       This program exists to execute untrusted model-generated code. Although       *
+        *      it is highly unlikely that model-generated code will do something overtly      *
+        *       malicious in response to this test suite, model-generated code may act        *
+        *           destructively due to a lack of model capability or alignment.             *
+        *                                                                                     *
+        *      Users are strongly encouraged to sandbox this evaluation suite so that it      *
+        *       does not perform destructive actions on their host or network. For more       *
+        *       information on how OpenAI sandboxes its code, see the accompanying paper.     *
+        *                                                                                     *
+        ***************************************************************************************
+        """)
 
         # sanity checks to not waste time on invalid parameters
         assert self.num_samples > 0, "num_samples must be greater than 0."
