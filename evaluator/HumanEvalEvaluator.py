@@ -1,11 +1,11 @@
 import os
 import torch
 from tqdm import tqdm
-from BaseEvaluator import BaseEvaluator
+from .BaseEvaluator import BaseEvaluator
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from prompt.HumanEval.prompts import SYSTEM_PROMPT
 from utils.HumanEval.extractor import extractor
-from utils.HumanEval.data import DATASET_DIR, stream_jsonl, write_candidates_to_jsonl
+from utils.HumanEval.data import stream_jsonl, write_candidates_to_jsonl
 from utils.HumanEval.eval import evaluate_functional_correctness
 
 class HumanEvalEvaluator(BaseEvaluator):
@@ -13,8 +13,8 @@ class HumanEvalEvaluator(BaseEvaluator):
     Evaluator for the HumanEval dataset
     """
 
-    def __init__(self, model_path, num_samples, model_type="hf", data_path=DATASET_DIR, output_path=os.path.join("..", "data", "HumanEval", "results")):
-        super().__init__(model_path, data_path, output_path)
+    def __init__(self, model_path, num_samples, model_type, data_path, output_path):
+        super().__init__(model_path, data_path, None, output_path)
         self.num_samples = num_samples
         self.model_type = model_type
 
@@ -102,7 +102,3 @@ class HumanEvalEvaluator(BaseEvaluator):
         pass_at_k = evaluate_functional_correctness(sample_file, problem_file=self.data_path)
         print(pass_at_k)
         return None
-    
-if __name__ == "__main__":
-    evaluator = HumanEvalEvaluator("../meta-llama--Llama-3_2-1B-Instruct", 1)
-    evaluator.evaluate_model()
