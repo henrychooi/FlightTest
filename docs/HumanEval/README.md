@@ -64,6 +64,12 @@ Flags:
 --model_type  Type of model. Only Hugging Face models are supported. Defaults to "hf".
 ```
 
+To run the benchmark at default settings (<b>pass@1</b>),
+
+```bash
+python main.py --model_path MODEL_PATH --evaluator humaneval
+```
+
 ## Known Issues
 
 While evaluation uses very little memory, you might see the following error message when the system is running out of RAM. Since this may cause some correct programs to fail, we recommend that you free some memory and try again.
