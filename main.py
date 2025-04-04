@@ -34,7 +34,7 @@ def main(evaluator: str, **kwargs):
                 model_path=kwargs['model_path'],
                 num_samples=kwargs['num_samples'],
                 model_type=kwargs['model_type'],
-                data_path=kwargs.get('data_path'),
+                data_path=kwargs['data_path'],
                 output_path=kwargs['output_path']
             )
 
