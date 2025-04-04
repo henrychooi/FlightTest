@@ -1,0 +1,8 @@
+Model: /workspace/share/models/Llama-3.2-1B-Instruct
+Temperature: 0.0
+Stop Sequences: ['Q:', '</s>', '<|im_end|>', '<|start_header_id|>user<|end_header_id|>', '<|eot_id|>']
+N-Shot: 8 (Hardcoded Prompts)
+CoT Prompting: True
+Total Problems Evaluated: 1319
+Correct Answers: 445
+Accuracy: 0.3374

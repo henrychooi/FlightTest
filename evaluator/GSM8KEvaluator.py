@@ -74,7 +74,7 @@ class GSM8KEvaluator(BaseEvaluator):
 
         # Store specific arguments
         self.temperature = temperature
-        self.stop_sequences = stop_sequences if stop_sequences is not None else GENERATION_STOP_TOKENS
+        self.stop_sequences = GENERATION_STOP_TOKENS
         self.do_sample = self.temperature > 0.0 # Determine sampling need
         self.n_shot = n_shot
         self.cot_flag = cot_flag
@@ -357,7 +357,7 @@ class GSM8KEvaluator(BaseEvaluator):
     def save_results(self, results_data, accuracy):
         """Saves detailed results and summary score."""
         
-        results_path = os.path.join(self.output_path, f"detailed_results_{self.model_name}_simple.jsonl")
+        results_path = os.path.join(self.output_path, f"{self.model_name}_results.jsonl")
         try:
             with open(results_path, "w", encoding='utf-8') as f:
                 for result in results_data: f.write(json.dumps(result) + "\n")
@@ -395,9 +395,9 @@ class GSM8KEvaluator(BaseEvaluator):
         print(f"Starting asynchronous evaluation task for {self.model_name}...")
         accuracy = await asyncio.to_thread(self._run_sync_evaluation)
         print(f"Asynchronous evaluation task completed for {self.model_name}. Accuracy: {accuracy:.4f}")
-        return accuracy
+        return None
     
 
 if __name__ == "__main__":
-    evaluator = GSM8KEvaluator(model_path="../meta-llama--Llama-3_2-1B-Instruct", data_path="../data/GSM8K/gsm8k_jsonl", output_path="../output/GSM8K", prompt_path="../prompt/GSM8K/gsm8k_prompt.json")
-    evaluator.evaluate_model()
+    evaluator = GSM8KEvaluator(model_path="../meta-llama--Llama-3_2-1B-Instruct", data_path="../data/GSM8K/gsm8k_jsonl", output_path="../output/GSM8K", prompt_path="../prompt/GSM8K/gsm8k_prompt.jsonl")
+    asyncio.run(evaluator.evaluate_model())
