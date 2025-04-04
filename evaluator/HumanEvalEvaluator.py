@@ -18,44 +18,68 @@ class HumanEvalEvaluator(BaseEvaluator):
         self.num_samples = num_samples
         self.model_type = model_type
 
-    def _load(self, model_path, model_type):
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    def _load(self):
 
-        if model_type == 'hf':
-            print("Loading model...")
-            tokenizer = AutoTokenizer.from_pretrained(model_path)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # print some ascii art
+
+        print(rf"""
+         __________
+        / ___  ___ \        FlightTest: HumanEval Benchmark
+        / / @ \/ @ \ \      
+        \ \___/\___/ /\     model_path: {self.model_path}
+        \____\/____/||      model_type: hf
+        /     /\\\\\//      num_samples: {self.num_samples}
+        |     |\\\\\\       device: {device}
+        \      \\\\\\       data_path: {self.data_path}
+        \______/\\\\        output_path: {self.output_path}
+            _||_||_         
+            -- --           It is strongly recommended to check all parameters above before proceeding.
+        """)
+
+        # sanity checks to not waste time on invalid parameters
+        assert self.num_samples > 0, "num_samples must be greater than 0."
+        assert os.path.exists(self.model_path), f"Model path {self.model_path} does not exist."
+        assert os.path.exists(self.data_path), f"Data path {self.data_path} does not exist."
+        assert os.path.exists(self.output_path), f"Output path {self.output_path} does not exist."
+
+        if self.num_samples > 1:
+            print("Warning: num_samples is set to more than 1. This will generate multiple samples for each problem. \n")
+        
+        if self.model_type == 'hf':
+  
+            tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             # Loads a pretrained model from the specified directory (if exists), otherwise pulls from HuggingFace
             model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+                self.model_path,
                 device_map="auto",
                 torch_dtype="bfloat16",
             )
             tokenizer.pad_token = tokenizer.eos_token
             model.eval()
-            print("Model loaded.")
+
         else:
             raise ValueError("Model type unsupported. Please set --model_type=hf.")
         return device, model, tokenizer
 
     # Inference pipeline for HuggingFace models
-    def _generate_samples(self, num_samples, data_path, output_path):
+    def _generate_samples(self):
 
-        device, model, tokenizer = self._load(self.model_path, self.model_type)
+        device, model, tokenizer = self._load()
 
         candidates = []
 
-        problems = list(stream_jsonl(data_path))
+        problems = list(stream_jsonl(self.data_path))
 
-        print("Generating code solutions...")
-        for _, problem in tqdm(enumerate(problems), total=len(problems), desc="Running inference...", unit="problem"):
+        for _, problem in tqdm(enumerate(problems), total=len(problems), desc="Running inference", unit="problem"):
             prompt = problem['prompt']
 
             # Generate multiple candidate solutions for each problem
             problem_candidates = []
 
             # Create a progress bar for the inner loop (samples per problem)
-            with tqdm(total=num_samples, desc="Sample", unit="sample", leave=False) as pbar:
-                for _ in range(num_samples):
+            with tqdm(total=self.num_samples, desc="Generating samples", unit="sample", leave=False) as pbar:
+                for _ in range(self.num_samples):
                     
                     # Prepare chat template
                     messages = [
@@ -90,15 +114,14 @@ class HumanEvalEvaluator(BaseEvaluator):
             # Add the candidates for the current problem
             candidates.append(problem_candidates)
 
-        print("Code generation complete.")
 
-        sample_file = os.path.join(output_path, f"sample_{os.path.basename(os.path.normpath(self.model_path))}.jsonl")
+        sample_file = os.path.join(self.output_path, f"sample_{os.path.basename(os.path.normpath(self.model_path))}_pass@{self.num_samples}.jsonl")
         write_candidates_to_jsonl(candidates, sample_file)
         return sample_file
     
     def evaluate_model(self):
-        sample_file = self._generate_samples(self.num_samples, self.data_path, self.output_path)
-        print("Starting model inference...")
+        sample_file = self._generate_samples()
         pass_at_k = evaluate_functional_correctness(sample_file, problem_file=self.data_path)
+        print()
         print(pass_at_k)
         return None
