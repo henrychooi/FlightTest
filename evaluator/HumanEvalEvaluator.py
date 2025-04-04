@@ -25,7 +25,7 @@ class HumanEvalEvaluator(BaseEvaluator):
 
         print(rf"""
          __________
-        / ___  ___ \        FlightTest: HumanEval Benchmark
+        /  ___  ___ \       FlightTest: HumanEval Benchmark
         / / @ \/ @ \ \      
         \ \___/\___/ /\     model_path: {self.model_path}
         \____\/____/||      model_type: hf
