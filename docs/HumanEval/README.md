@@ -33,7 +33,7 @@ The number of entries with the same `task_id` correspond to the number of passes
 
 ## Evaluation
 
-The <b>pass@k</b> metric (<a href="https://arxiv.org/abs/2107.03374">Kulal et al., 2020</a>) generates $k$ code solutions per problem. In this benchmark, we generate $n\geq k$ solutions per problem and count the number of correct samples $c\leq n$ that pass the unit tests.
+The <b>pass@k</b> metric (<a href="https://arxiv.org/abs/2107.03374">Chen et al., 2019</a>) generates $k$ code solutions per problem. In this benchmark, we generate $n\geq k$ solutions per problem and count the number of correct samples $c\leq n$ that pass the unit tests.
 
 Then, we calculate the unbiased estimator:
 
