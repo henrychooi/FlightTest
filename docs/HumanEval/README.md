@@ -50,17 +50,18 @@ where
 
 Putting the math aside, this means that the greater the value that we have for $n$, the lower variance and the higher the accuracy of a model's <b>pass@k</b> score. Therefore, the <b>pass@1</b> score calculated from only $n=1$ sample might not be the same as compared to if you took $n=100$ samples instead.
 
-As such, there may be a discrepancy between the results obtained and published results for the same model. In the official implementation by OpenAI, $k$ is set to `[1, 10, 100]` by default. To change this, you can specify the flag `--k` with comma separated values.
+As such, there may be a discrepancy between the results obtained and published results for the same model. In the official implementation by OpenAI, $k$ is set to `[1, 10, 100]` by default. When running the benchmark, you can specify the `--num_samples` flag to specify the value for $n$ to be used, which defaults to 1. This means, that for $n=100$, a pass@1, pass@10, and pass@100 score will be generated.
 
 ## Usage
 
-TBC: flags
+Flags:
 
 ```
---k           Comma separated value eg. 1,10,100 corresponding to pass@k metric
---num_samples Value of n in the formula. Number of samples to generate per problem.
---model_dir   Path to model if downloaded locally. Otherwise, pulls the model from valid HuggingFace repository. eg. meta-llama/Llama-3.2-1B
---sample_file Prefix of filename to write generated samples to. File will be saved to data/HumanEval/results/<sample_file>_candidates.jsonl
+--model_path  Path to the model to be evaluated
+--num_samples Value of n in the formula. Number of samples to generate per problem. Defaults to 1.
+--data_path   Path to the dataset file. Defaults to the original dataset if not specified, which is stored in data/HumanEval.
+--output_path Path to the output directory of the results file. Defaults to data/HumanEval/results.
+--model_type  Type of model. Only Hugging Face models are supported. Defaults to "hf".
 ```
 
 ## Known Issues
