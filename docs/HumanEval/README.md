@@ -4,6 +4,23 @@ This is a short documentation on the HumanEval benchmark. This benchmark consist
 
 The model is provided with a function template and a docstring, which includes examples. This is given as a prompt to the model, and the output is executed in a sandbox environment against multiple test cases.
 
+## Results
+As of 7/4/2025:
+
+| Model           | pass@1 (%) | Reported pass@1 (%) | Diff (%) |
+|----------------|------------|----------------------|----------|
+| llama3.1:8b     | 61.5       | 72.6                 | -11.1    |
+| llama3.2:3b     | 52.3       | –                    | –        |
+| llama3.2:1b     | 33.1       | –                    | –        |
+
+
+with hyperparameters
+
+- temperature: 0.2
+- top_p: 0.95
+- do_sample: True
+- max_new_tokens: 512
+
 ## Dataset
 
 The dataset and code execution scripts were taken from <a href="https://github.com/openai/human-eval">openai/human-eval</a>.
@@ -57,11 +74,13 @@ As such, there may be a discrepancy between the results obtained and published r
 Flags:
 
 ```
---model_path  Path to the model to be evaluated
---num_samples Value of n in the formula. Number of samples to generate per problem. Defaults to 1.
---data_path   Path to the dataset file. Defaults to the original dataset if not specified, which is stored in data/HumanEval.
---output_path Path to the output directory of the results file. Defaults to data/HumanEval/results.
---model_type  Type of model. Only Hugging Face models are supported. Defaults to "hf".
+--model_path    Path to the model to be evaluated
+--num_samples   Value of n in the formula. Number of samples to generate per problem. Defaults to 1.
+--data_path     Path to the dataset file. Defaults to the original dataset if not specified, which is stored in data/HumanEval.
+--output_path   Path to the output directory of the results file. Defaults to data/HumanEval/results.
+--model_type    Type of model. Only Hugging Face models are supported. Defaults to "hf".
+--evaluate_only Runs the evaluation suite only. No inference will be performed. Must be accompanied by the --sample_file flag (see below).
+--sample_file   Path to the sample file to be evaluated.
 ```
 
 To run the benchmark at default settings (<b>pass@1</b>),
