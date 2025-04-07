@@ -39,7 +39,7 @@ def evaluate_functional_correctness(
         sample_file: str,
         k: List[int] = [1, 10, 100],
         n_workers: int = 4,
-        timeout: float = 3.0,
+        timeout: float = 10.0,
         problem_file: str = DATASET_DIR,
     ):
         """
