@@ -14,7 +14,7 @@ from transformers import (
     StoppingCriteriaList,
 )
 from typing import Optional, List
-from evaluator import BaseEvaluator
+from .BaseEvaluator import BaseEvaluator
 from utils.GSM8K.data import load_jsonl
 from utils.GSM8K.seeding import seed_everything
 
