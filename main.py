@@ -18,14 +18,15 @@ def main(evaluator: str, **kwargs):
                 "llama", 
                 5
             )
+            llm_evaluator.evaluate_model()
         case "gsm8k":
-                llm_evaluator = GSM8KEvaluator(
+            llm_evaluator = GSM8KEvaluator(
                 model_path=kwargs['model_path'],
                 data_path=kwargs['data_path'],
                 output_path=kwargs['output_path'],
                 prompt_path=kwargs.get('prompt_path')
             )
-
+            llm_evaluator.evaluate_model()
         case "humaneval":
             # Check if evaluate_only is set
             if kwargs.get('evaluate_only'):
@@ -52,11 +53,56 @@ def main(evaluator: str, **kwargs):
                 evaluate_only=kwargs.get('evaluate_only', False),
                 sample_file=kwargs.get('sample_file', None)
             )
+            llm_evaluator.evaluate_model()
+        case "all":
+            llm_evaluator = MMLUEvaluator(
+                kwargs['model_path'], 
+                kwargs['data_path'], 
+                kwargs.get('prompt_path'), 
+                kwargs['output_path'], 
+                kwargs.get('param_size'), 
+                "llama", 
+                5
+            )
+            llm_evaluator.evaluate_model()
 
+            llm_evaluator = GSM8KEvaluator(
+                model_path=kwargs['model_path'],
+                data_path=kwargs['data_path'],
+                output_path=kwargs['output_path'],
+                prompt_path=kwargs.get('prompt_path')
+            )
+            llm_evaluator.evaluate_model()
+
+            # Check if evaluate_only is set
+            if kwargs.get('evaluate_only'):
+                assert kwargs.get('sample_file') is not None, "Sample file must be provided when evaluate_only is set. Please specify --sample_file PATH_TO_SAMPLE_FILE"
+                assert os.path.exists(kwargs['sample_file']), f"Sample file {kwargs['sample_file']} does not exist."
+
+            # If output or data path not specified, set default values
+            if 'output_path' not in kwargs or kwargs['output_path'] is None:
+                kwargs['output_path'] = os.path.join("output", "HumanEval")
+            
+            if 'data_path' not in kwargs or kwargs['data_path'] is None:
+                kwargs['data_path'] = HUMANEVAL_DATASET_DIR
+
+            # ensure the output directory exists
+            os.makedirs(kwargs['output_path'], exist_ok=True)
+
+            llm_evaluator = HumanEvalEvaluator(
+                model_path=kwargs['model_path'],
+                num_samples=kwargs['num_samples'],
+                model_type=kwargs['model_type'],
+                data_path=kwargs['data_path'],
+                output_path=kwargs['output_path'],
+                debug=kwargs['debug'],
+                evaluate_only=kwargs.get('evaluate_only', False),
+                sample_file=kwargs.get('sample_file', None)
+            )
+            llm_evaluator.evaluate_model()
         case _: 
             raise ValueError("Error, unsupported type of evaluator")
-        
-    llm_evaluator.evaluate_model()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()    
@@ -69,7 +115,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_samples', type=int, default=1, required=False, help="Number of samples to generate for the HumanEval benchmark. Defaults to 1 for pass@1 score.")
     parser.add_argument("--evaluate_only", action='store_true', help="Only runs the evaluation without generating samples. Requires a path to a sample file.")
     parser.add_argument('--sample_file', type=str, required=False, help="Path to the sample file for evaluation. Required if --evaluate_only is set.")
-    parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval'])
+    parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval', 'all'])
 
 
     parser.add_argument("--n_shot", type=int, default=8, help="Number of few-shot examples (max 8).")
