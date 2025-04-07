@@ -13,10 +13,13 @@ class HumanEvalEvaluator(BaseEvaluator):
     Evaluator for the HumanEval dataset
     """
 
-    def __init__(self, model_path, num_samples, model_type, data_path, output_path):
+    def __init__(self, model_path, num_samples, model_type, data_path, output_path, debug, evaluate_only, sample_file):
         super().__init__(model_path, data_path, None, output_path)
         self.num_samples = num_samples
         self.model_type = model_type
+        self.debug = debug
+        self.evaluate_only = evaluate_only
+        self.sample_file = sample_file
 
     def _load(self):
 
@@ -52,10 +55,14 @@ class HumanEvalEvaluator(BaseEvaluator):
         ***************************************************************************************
         """)
 
+        if self.debug:
+            print("DEBUG MODE!")
+
         # sanity checks to not waste time on invalid parameters
         assert self.num_samples > 0, "num_samples must be greater than 0."
         assert os.path.exists(self.data_path), f"Data path {self.data_path} does not exist."
         assert os.path.exists(self.output_path), f"Output path {self.output_path} does not exist."
+        
 
         if self.num_samples > 1:
             print("Warning: num_samples is set to more than 1. This will generate multiple samples for each problem. \n")
@@ -64,6 +71,7 @@ class HumanEvalEvaluator(BaseEvaluator):
   
             tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             # Loads a pretrained model from the specified directory (if exists), otherwise pulls from HuggingFace
+
             model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
                 device_map="auto",
@@ -81,6 +89,21 @@ class HumanEvalEvaluator(BaseEvaluator):
 
         device, model, tokenizer = self._load()
 
+        if tokenizer.chat_template is None:
+            # Print a warning message as well
+            print(rf"""
+        ***************************************************************************************
+        *                                       WARNING!                                      *
+        *                                                                                     *
+        *    tokenizer.chat_template does not exist. This could mean that you are running     *
+        *   the benchmark on a base model instead of an instruction-tuned model. This could   *
+        *                   lead to inaccurate and/or undesirable results.                    *
+        *                                                                                     *
+        *          For best results, please use an instruction-tuned model instead.           *
+        *                                                                                     *
+        ***************************************************************************************
+        """)
+
         candidates = []
 
         problems = list(stream_jsonl(self.data_path))
@@ -94,17 +117,25 @@ class HumanEvalEvaluator(BaseEvaluator):
             # Create a progress bar for the inner loop (samples per problem)
             with tqdm(total=self.num_samples, desc="Generating samples", unit="sample", leave=False) as pbar:
                 for _ in range(self.num_samples):
-                    
-                    # Prepare chat template
-                    messages = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ]
-                    
 
-                    formatted_prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-                    inputs = tokenizer(formatted_prompt, return_tensors="pt", padding=True).to(device)
-                    attention_mask = inputs['attention_mask']
+                    if tokenizer.chat_template is None:
+                        # Pass in the prompt directly without any chat template
+                        inputs = tokenizer(prompt, return_tensors="pt", padding=True).to(device)
+                        attention_mask = inputs['attention_mask']
+
+                    else:
+                        # Prepare chat template if chat template exists
+                        messages = [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ]
+                        
+
+                        formatted_prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+                        inputs = tokenizer(formatted_prompt, return_tensors="pt", padding=True).to(device)
+                        attention_mask = inputs['attention_mask']
+
+                        prompt_length = inputs['input_ids'].shape[1]
 
                     with torch.no_grad():
                         outputs = model.generate(inputs['input_ids'],
@@ -115,12 +146,25 @@ class HumanEvalEvaluator(BaseEvaluator):
                                                 temperature=0.2,
                                                 pad_token_id=tokenizer.pad_token_id,
                                                 eos_token_id=tokenizer.eos_token_id)
-                        
-                    prompt_length = inputs['input_ids'].shape[1]
+                    
+                    
+                    if tokenizer.chat_template is None:
+                        generated_code = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-                    generated_code = tokenizer.decode(outputs[0][prompt_length:], skip_special_tokens=True)
-                        
+                    else:
+                        # Remove system prompt if chat template is used
+                        generated_code = tokenizer.decode(outputs[0][prompt_length:], skip_special_tokens=True)
+
+                    if self.debug:
+                        print("=====================BEGIN GENERATED CODE=====================")
+                        print(generated_code)
+                        print("=====================END GENERATED CODE=======================")
                     extracted_code = extractor(generated_code)
+
+                    if self.debug:
+                        print("=====================BEGIN EXTRACTED CODE=====================")
+                        print(extracted_code)
+                        print("=====================END EXTRACTED CODE=======================")
 
                     problem_candidates.append(extracted_code)
                     pbar.update(1)
@@ -134,8 +178,10 @@ class HumanEvalEvaluator(BaseEvaluator):
         return sample_file
     
     def evaluate_model(self):
-        sample_file = self._generate_samples()
-        pass_at_k = evaluate_functional_correctness(sample_file, problem_file=self.data_path)
+        if not self.evaluate_only:
+            # Generate samples if evaluate_only is not set
+            self.sample_file = self._generate_samples()
+        pass_at_k = evaluate_functional_correctness(self.sample_file, problem_file=self.data_path)
         print()
         print(pass_at_k)
         return None
