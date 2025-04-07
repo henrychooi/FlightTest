@@ -3,8 +3,6 @@ import os
 import random
 import torch
 import json
-import asyncio
-
 import transformers
 from tqdm import tqdm
 from transformers import (
@@ -14,7 +12,7 @@ from transformers import (
     StoppingCriteriaList,
 )
 from typing import Optional, List
-from .BaseEvaluator import BaseEvaluator
+from evaluator.BaseEvaluator import BaseEvaluator
 from utils.GSM8K.data import load_jsonl
 from utils.GSM8K.seeding import seed_everything
 
@@ -390,14 +388,14 @@ class GSM8KEvaluator(BaseEvaluator):
 
     # --- Implementation of the abstract method ---
     
-    async def evaluate_model(self):
-        """Asynchronously evaluate the model (single sample)."""
-        print(f"Starting asynchronous evaluation task for {self.model_name}...")
-        accuracy = await asyncio.to_thread(self._run_sync_evaluation)
-        print(f"Asynchronous evaluation task completed for {self.model_name}. Accuracy: {accuracy:.4f}")
+    def evaluate_model(self):
+        """Evaluate the model (single sample)."""
+        print(f"Starting evaluation task for {self.model_name}...")
+        accuracy = self._run_sync_evaluation()
+        print(f"Evaluation task completed for {self.model_name}. Accuracy: {accuracy:.4f}")
         return None
     
 
-if __name__ == "__main__":
-    evaluator = GSM8KEvaluator(model_path="../meta-llama--Llama-3_2-1B-Instruct", data_path="../data/GSM8K/gsm8k_jsonl", output_path="../output/GSM8K", prompt_path="../prompt/GSM8K/gsm8k_prompt.jsonl")
-    asyncio.run(evaluator.evaluate_model())
+# if __name__ == "__main__":
+#     evaluator = GSM8KEvaluator(model_path=r"C:\Users\lh\Documents\evaluations\meta-llama-Llama-3_2-3b", data_path=r"data\GSM8K\gsm8k_jsonl", output_path=r"output\GSM8K", prompt_path=r"prompt\GSM8K\gsm8k_prompt.jsonl")
+#     evaluator.evaluate_model()
