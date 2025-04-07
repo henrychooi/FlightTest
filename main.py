@@ -27,6 +27,11 @@ def main(evaluator: str, **kwargs):
             )
 
         case "humaneval":
+            # Check if evaluate_only is set
+            if kwargs.get('evaluate_only'):
+                assert kwargs.get('sample_file') is not None, "Sample file must be provided when evaluate_only is set. Please specify --sample_file PATH_TO_SAMPLE_FILE"
+                assert os.path.exists(kwargs['sample_file']), f"Sample file {kwargs['sample_file']} does not exist."
+
             # If output or data path not specified, set default values
             if 'output_path' not in kwargs or kwargs['output_path'] is None:
                 kwargs['output_path'] = os.path.join("output", "HumanEval")
@@ -42,7 +47,10 @@ def main(evaluator: str, **kwargs):
                 num_samples=kwargs['num_samples'],
                 model_type=kwargs['model_type'],
                 data_path=kwargs['data_path'],
-                output_path=kwargs['output_path']
+                output_path=kwargs['output_path'],
+                debug=kwargs['debug'],
+                evaluate_only=kwargs.get('evaluate_only', False),
+                sample_file=kwargs.get('sample_file', None)
             )
 
         case _: 
@@ -59,6 +67,8 @@ if __name__ == "__main__":
     parser.add_argument('--param_size', type=int, required=False)
     parser.add_argument('--model_type', type=str, required=False, choices=['hf'], default='hf', help="Model type. Currently, only Hugging Face models are supported. Defaults to 'hf'.")
     parser.add_argument('--num_samples', type=int, default=1, required=False, help="Number of samples to generate for the HumanEval benchmark. Defaults to 1 for pass@1 score.")
+    parser.add_argument("--evaluate_only", action='store_true', help="Only runs the evaluation without generating samples. Requires a path to a sample file.")
+    parser.add_argument('--sample_file', type=str, required=False, help="Path to the sample file for evaluation. Required if --evaluate_only is set.")
     parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval'])
 
 
