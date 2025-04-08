@@ -15,3 +15,18 @@ def create_prompt_list(df):
         rendered_prompt = template.render(question=row["question"], choices=row["choices"])
         prompt_list.append(rendered_prompt)
     return prompt_list
+
+def create_parquet_file(df, file_path):
+    """
+    Save the DataFrame to a parquet file.
+    """
+    df.to_parquet(file_path, engine='pyarrow', index=False)
+
+def calculate_accuracy(predictions, ground_truth):
+    """
+    Calculate the accuracy of the predictions against the ground truth.
+    """
+    correct_predictions = sum([1 for pred, gt in zip(predictions, ground_truth) if pred == gt])
+    accuracy = correct_predictions / len(ground_truth)
+    return accuracy
+
