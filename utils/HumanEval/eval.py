@@ -101,4 +101,4 @@ def evaluate_functional_correctness(
         print(f"Writing results to {out_file}...")
         write_jsonl(out_file, tqdm(combine_results(), total=n_samples))
 
-        return pass_at_k
+        return pass_at_k, len(total), len(correct)
