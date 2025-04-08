@@ -3,6 +3,12 @@ from evaluator.HumanEvalEvaluator import HumanEvalEvaluator
 from evaluator.GSM8KEvaluator import GSM8KEvaluator
 from typing import Optional
 from utils.HumanEval.data import DATASET_DIR as HUMANEVAL_DATASET_DIR
+from utils.GSM8K.defaults import (
+    DATASET_DIR as GSM8K_DATASET_DIR,
+    PROMPT_DIR as GSM8K_PROMPT_DIR,
+    MODEL_DIR as GSM8K_MODEL_DIR,
+    OUTPUT_DIR as GSM8K_OUTPUT_DIR,
+)
 import argparse
 import os
 
@@ -20,6 +26,11 @@ def main(evaluator: str, **kwargs):
             )
             llm_evaluator.evaluate_model()
         case "gsm8k":
+                kwargs.setdefault("model_path", GSM8K_MODEL_DIR)
+                kwargs.setdefault("data_path", GSM8K_DATASET_DIR)
+                kwargs.setdefault("prompt_path", GSM8K_PROMPT_DIR)
+                kwargs.setdefault("output_path", GSM8K_OUTPUT_DIR)
+
             llm_evaluator = GSM8KEvaluator(
                 model_path=kwargs['model_path'],
                 data_path=kwargs['data_path'],
@@ -27,6 +38,7 @@ def main(evaluator: str, **kwargs):
                 prompt_path=kwargs.get('prompt_path')
             )
             llm_evaluator.evaluate_model()
+
         case "humaneval":
             # Check if evaluate_only is set
             if kwargs.get('evaluate_only'):
