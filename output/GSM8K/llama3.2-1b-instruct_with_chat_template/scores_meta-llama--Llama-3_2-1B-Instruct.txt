@@ -5,5 +5,5 @@ Stop Sequences: ['Q:', '</s>', '<|im_end|>', '<|start_header_id|>user<|end_heade
 N-Shot: 8 (Hardcoded Prompts)
 CoT Prompting: True
 Total Problems Evaluated: 1319
-Correct Answers: 146
-Accuracy: 0.1107
+Correct Answers: 521
+Accuracy: 0.3950
