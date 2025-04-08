@@ -79,6 +79,7 @@ class MMLUEvaluator(BaseEvaluator):
 
 
     def _compute_metric(self, output_file):
+        final_output = []
         with open(output_file, 'r') as f:
             run_results = json.load(f)
         total_acc = 0
@@ -90,9 +91,12 @@ class MMLUEvaluator(BaseEvaluator):
             for pred, gold in zip(pred_answers, gold_answers):
                 if pred == gold: acc += 1
             print("ACC-%s: %.4f" % (task, acc/len(gold_answers)))
+            final_output.append("ACC-%s: %.4f" % (task, acc/len(gold_answers)))
             total_acc += acc
             total_num += len(gold_answers)
         print("ACC-all: %.4f" % (total_acc/total_num))
+        final_output.append("ACC-all: %.4f" % (total_acc/total_num))
+        return final_output
 
 
     def _format_subject(self, subject):
@@ -218,9 +222,11 @@ class MMLUEvaluator(BaseEvaluator):
         with open(output_filename, 'w') as f:
             json.dump(run_results, f, ensure_ascii=False, indent=2)
         
-        self._compute_metric(output_filename)
+        output = self._compute_metric(output_filename)
         end_time = time.time()
         print("total run time %.2f" % (end_time - start_time))
+        with open(self.output_path + 'final_results_%s_%sb.txt' % (self.model_type, self.param_size), 'wt') as f:
+            f.write('\n'.join(output))
         return None
 
 if __name__ == "__main__":
