@@ -1,6 +1,7 @@
 import os
 import torch
 from tqdm import tqdm
+from time import strftime
 from .BaseEvaluator import BaseEvaluator
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from prompt.HumanEval.prompts import SYSTEM_PROMPT
@@ -177,11 +178,27 @@ class HumanEvalEvaluator(BaseEvaluator):
         write_candidates_to_jsonl(candidates, sample_file)
         return sample_file
     
+    def _write_results(self, pass_at_k, total_samples, correct_samples):
+        # Write results to a file
+        with open(os.path.join(self.output_path, "results.txt"), "w") as f:
+            f.write(strftime("%Y-%m-%d %H:%M:%S") + "\n")
+            f.write(f"Model: {self.model_path}\n")
+            f.write(f"Model type: {self.model_type}\n")
+            f.write(f"Data path: {self.data_path}\n")
+            f.write(f"Output path: {self.output_path}\n")
+            f.write(f"Temperature: 0.2\n")
+            f.write(f"Number of samples per problem: {self.num_samples}\n")
+            f.write(f"Total samples evaluated: {total_samples}\n")
+            f.write(f"Correct samples: {correct_samples}\n")
+            f.write(f"Pass@k: {pass_at_k}\n")
+        print(f"Benchmark complete! Results written to {os.path.join(self.output_path, 'results.txt')}")
+    
     def evaluate_model(self):
         if not self.evaluate_only:
             # Generate samples if evaluate_only is not set
             self.sample_file = self._generate_samples()
-        pass_at_k = evaluate_functional_correctness(self.sample_file, problem_file=self.data_path)
-        print()
+        pass_at_k, total_samples, correct_samples = evaluate_functional_correctness(self.sample_file, problem_file=self.data_path)
         print(pass_at_k)
+        self._write_results(pass_at_k, total_samples, correct_samples)
         return None
+    
