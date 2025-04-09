@@ -10,21 +10,19 @@ GSM8K (Grade School Math 8K) is a dataset containing 8,500 high-quality, linguis
 Each problem consists of a natural language question and a corresponding final answer.
 
 ## Results
-*As of July 4, 2025:*
+*As of 09/04/2025:*
 
 ### Base Models:
 | Model | Accuracy (%) | Reported Accuracy (%) | Diff (%) |
 |---------------|--------------|------------------------|----------|
 | llama3.2:3b | 29.3 | - | - |
-| *[other base models]* | - | - | - |
 
 ### Instruct Models:
 | Model | Accuracy (%) | Reported Accuracy (%) | Diff (%) |
 |---------------|--------------|------------------------|----------|
 | llama3.1:8b | - | - | - |
-| llama3.2:1b | 33.7 | – | – |
+| llama3.2:1b | 39.9 | – | – |
 | llama3.2:3b | - | – | – |
-| *[other instruct models]* | - | - | - |
 
 ### Default Hyperparameters:
 ```
