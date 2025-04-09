@@ -3,7 +3,6 @@ import os
 import random
 import torch
 import json
-from jinja2 import Template
 import transformers
 from tqdm import tqdm
 from transformers import (
@@ -12,26 +11,19 @@ from transformers import (
     StoppingCriteria,
     StoppingCriteriaList,
 )
-from typing import Optional, List
-from evaluator.BaseEvaluator import BaseEvaluator
+from typing import Optional, List, Dict, Any
 from utils.GSM8K.data import load_jsonl
 from utils.GSM8K.seeding import seed_everything
-
-# Set transformers verbosity
-transformers.logging.set_verbosity_error()
-
+from evaluator.BaseEvaluator import BaseEvaluator
 
 # --- Constants ---
-
 GROUND_TRUTH_RE = re.compile(r"#### (\-?[0-9\.\,]+)")
 MODEL_ANS_RE = re.compile(r"(-?\$?[\d,]+\.?\d*)|(-?\d+)")
 # can be modified according to your requirement
 GENERATION_STOP_TOKENS = ["Q:", "</s>", "<|im_end|>", "<|start_header_id|>user<|end_header_id|>", "<|eot_id|>"]
 
-# --- Custom Stopping Criteria ---
-
+# --- Custom Stopping Criteria (Simplified - definition remains the same) ---
 class StopSequenceCriteria(StoppingCriteria):
-    # (StopSequenceCriteria class definition remains the same)
     def __init__(self, tokenizer, stop_sequences, input_length):
         self.tokenizer = tokenizer
         self.stop_sequences = stop_sequences
@@ -39,117 +31,50 @@ class StopSequenceCriteria(StoppingCriteria):
 
     def __call__(self, input_ids, scores, **kwargs) -> bool:
         generated_ids = input_ids[:, self.input_length:]
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        for stop_seq in self.stop_sequences:
-            # Check if the *end* of the generated text contains the stop sequence
-            # This is often more reliable than just 'in' to avoid premature stopping
-            if generated_text.endswith(stop_seq):
-                 # print(f"\nStopping on: '{stop_seq}'") # Optional debug print
-                 return True
+        # Optimization: Decode only the last few tokens to check for endswith
+        # Adjust the window size based on max stop sequence length
+        max_stop_len = max(len(s) for s in self.stop_sequences) if self.stop_sequences else 0
+        min_decode_len = min(generated_ids.shape[1], max_stop_len + 5)
+        if min_decode_len > 0:
+            generated_text = self.tokenizer.decode(generated_ids[0, -min_decode_len:], skip_special_tokens=True)
+            for stop_seq in self.stop_sequences:
+                if generated_text.endswith(stop_seq):
+                    return True
         return False
 
-
+# --- GSM8K Evaluator Class ---
 class GSM8KEvaluator(BaseEvaluator):
-    """
-    Evaluator for GSM8K using single-sample evaluation.
-    Uses hardcoded few-shot prompts.
-    """
-
     def __init__(self,
-                 model_path: os.PathLike,
-                 data_path: os.PathLike,
-                 output_path: os.PathLike,
-                 prompt_path: os.PathLike,
-
-                 # Arguments for single-sample evaluation
-                 temperature: float = 0.0, # Default to greedy for single pass
-                 stop_sequences: Optional[List[str]] = None,
+                 model_path: str,
+                 data_path: str,
+                 output_path: str,
+                 prompt_path:str, 
+                 temperature: float = 0.0,
+                 max_new_tokens: int = 512,
+                 stop_sequences: List[str] = GENERATION_STOP_TOKENS,
                  n_shot: int = 8,
-                 cot_flag: bool = True,
                  seed: int = 42,
-                 debug: bool = False):
+                 is_chat_model: bool = True):
 
         super().__init__(model_path=model_path, data_path=data_path, output_path=output_path, prompt_path=prompt_path)
-
-        # Store specific arguments
         self.temperature = temperature
-        self.stop_sequences = GENERATION_STOP_TOKENS
-        self.do_sample = self.temperature > 0.0 # Determine sampling need
+        self.max_new_tokens = max_new_tokens
+        self.stop_sequences = stop_sequences        
         self.n_shot = n_shot
-        self.cot_flag = cot_flag
         self.seed = seed
-        self.debug = debug
+        self.is_chat_model = is_chat_model
 
-        # Internal state
+
         self.model = None
         self.tokenizer = None
         self.dataset = None
-        self.demo_text = ""
+        self._few_shot_examples = []
 
-        print(f"Initialised GSM8K Evaluator for model: {self.model_name}")
-        print(f"Temperature: {self.temperature} (Sampling: {self.do_sample})")
-        print(f"Stop Sequences: {self.stop_sequences}")
+        transformers.logging.set_verbosity_error()
 
-    # --- Helper Methods ---
-
-    def setup(self):
-        """Set up environment (seed, directories)."""
-        print("Setting up environment...")
-        seed_everything(self.seed)
-        os.makedirs(self.output_path, exist_ok=True)
-        print(f"Seed set to {self.seed}")
-        print(f"Output directory: {self.output_path}")
-
-    def load_resources(self):
-        """Load model, tokenizer, dataset, and prepare prompts."""
-        self._load_model_and_tokenizer()
-        self._load_data()
-        self._prepare_demo_text() # Prepare few-shot prompt
-
-    def _load_model_and_tokenizer(self):
-        """Load the model and tokenizer."""
-        print(f"Loading model from {self.model_path} ...")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
-
-        model_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        print(f"Using model dtype: {model_dtype}")
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_path, device_map="auto", torch_dtype=model_dtype, trust_remote_code=True
-        )
-        if self.tokenizer.pad_token_id is None:
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id if self.tokenizer.eos_token_id is not None else 0
-
-        self.model.eval()
-        print("Model and tokenizer loaded.")
-
-    def _load_data(self):
-        """Load the GSM8K dataset."""
-        print(f"Loading data using data path: {self.data_path}")
-        test_filename = "gsm8k_test.jsonl"
-        test_filepath = os.path.join(self.data_path, test_filename)
-        if not os.path.exists(test_filepath):
-            print(f"Test file not found at {test_filepath}. Cannot proceed.")
-            raise FileNotFoundError(f"GSM8K test file not found at {test_filepath}")
-        self.dataset = load_jsonl(test_filepath, instruction="question", output="answer")
-        print(f"Loaded {len(self.dataset)} examples from {test_filepath}")
-
-    def _get_prompt_examples(self):
-        """Loads or returns few-shot examples."""
-        if self.prompt_path and os.path.exists(self.prompt_path):
-            print(f"Loading few-shot examples from {self.prompt_path}")
-            try:
-                # Expecting a JSON list of {"question": ..., "answer": ...}
-                # Answer should ideally contain the CoT chain AND the final answer marker
-                prompt_examples = load_jsonl(self.prompt_path)
-                # Basic validation
-                if not isinstance(prompt_examples, list) or not all("question" in ex and "answer" in ex for ex in prompt_examples):
-                    raise ValueError("Prompt file must be a JSON list of objects with 'question' and 'answer' keys.")
-                return prompt_examples
-            except Exception as e:
-                print(f"ERROR: Failed to load or parse prompt file {self.prompt_path}: {e}. Falling back.")
-
-        print("Warning: Using hardcoded default few-shot examples.")
-        default_examples = [
+    @staticmethod
+    def _get_hardcoded_examples():
+         return [
             {
                 "question": "There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?",
                 "answer": "There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. #### 6"
@@ -184,103 +109,145 @@ class GSM8KEvaluator(BaseEvaluator):
             }
         ]
 
-        # If not using CoT, strip the reasoning part *from the default examples*
-        # for the demo text generation later.
-        if not self.cot_flag:
-            for ex in default_examples:
-                if "####" in ex["answer"]:
-                    # Keep only the marker and the answer value for non-CoT prompts
-                    ex["answer"] = "####" + ex["answer"].split("####")[-1].strip()
-        return default_examples
-    
-    def _prepare_demo_text(self):
-        """Creates the few-shot demonstration text from examples."""
-        prompt_examples = self._get_prompt_examples()
-        if len(prompt_examples) < self.n_shot:
-            print(f"Warning: Available prompts ({len(prompt_examples)}) < n_shot ({self.n_shot}). Using all.")
-            self.n_shot = len(prompt_examples)
-        # (Rest of the logic remains the same)
-        indices = list(range(len(prompt_examples)))
-        random.shuffle(indices)
-        selected_indices = indices[:self.n_shot]
-        demo_text = ""
-        for i in selected_indices:
-            ex = prompt_examples[i]
-            q, a = ex["question"], ex["answer"]
-            if self.cot_flag: demo_text += f"Q: {q}\nA: {a}\n\n"
-            else:
-                final_ans_part = a.split("####")[-1].strip()
-                demo_text += f"Q: {q}\nA: #### {final_ans_part}\n\n"
-        self.demo_text = demo_text
-        print(f"Prepared {self.n_shot}-shot demo text (CoT: {self.cot_flag}).")
+
+    def setup(self):
+        print("Setting up environment...")
+        seed_everything(self.seed)
+        os.makedirs(self.output_path, exist_ok=True)
+        print(f"Output directory: {self.output_path}")
+
+    def _load_model_and_tokenizer(self):
+        print(f"Loading model from {self.model_path}...")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+
+        model_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        print(f"Using model dtype: {model_dtype}")
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_path, device_map="auto", torch_dtype=model_dtype, trust_remote_code=True
+        )
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id if self.tokenizer.eos_token_id is not None else 0
+
+        self.model.eval()
+        print("Model and tokenizer loaded.")
+
+    def _load_data(self):
+        print(f"Loading data using data path: {self.data_path}")
+        test_filename = "gsm8k_test.jsonl"
+        test_filepath = os.path.join(self.data_path, test_filename)
+        if not os.path.exists(test_filepath):
+            print(f"ERROR: Test file not found at {test_filepath}. Cannot proceed.")
+            raise FileNotFoundError(f"GSM8K test file not found at {test_filepath}")
+        self.dataset = load_jsonl(test_filepath, instruction="question", output="answer")
+        print(f"Loaded {len(self.dataset)} examples from {test_filepath}")
+        if not self.dataset:
+            raise ValueError("Dataset loaded is empty.")
+        
+    def _load_prompt_examples(self):
+        """Loads few-shot examples from prompt_path or uses hardcoded defaults."""
+        loaded_successfully = False
+        if self.prompt_path and os.path.exists(self.prompt_path):
+            try:
+                print(f"Loading prompt examples from {self.prompt_path}...")
+                loaded_examples = load_jsonl(self.prompt_path)
+                if isinstance(loaded_examples, list) and loaded_examples:
+                    # Basic validation: check if items are dicts with required keys
+                    if all(isinstance(ex, dict) and 'question' in ex and 'answer' in ex for ex in loaded_examples):
+                        self._few_shot_examples = loaded_examples
+                        print(f"Successfully loaded {len(self._few_shot_examples)} prompt examples.")
+                        loaded_successfully = True
+                    else:
+                        print("ERROR: Prompt file loaded, but examples lack 'question' or 'answer' keys.")
+                else:
+                    print("ERROR: Prompt file loaded, but it's empty or not a list.")
+            except Exception as e:
+                print(f"ERROR: Failed to load or parse prompt file {self.prompt_path}: {e}")
+
+        if not loaded_successfully:
+            print("Warning: Using hardcoded few-shot examples.")
+            self._few_shot_examples = self._get_hardcoded_examples()
+
+        # Adjust number of examples based on n_shot parameter
+        if len(self._few_shot_examples) < self.n_shot:
+             print(f"Warning: Requested n_shot={self.n_shot}, but only {len(self._few_shot_examples)} examples available. Using all available.")
+             self.n_shot = len(self._few_shot_examples)
+        elif len(self._few_shot_examples) > self.n_shot:
+             print(f"Selecting {self.n_shot} examples from {len(self._few_shot_examples)} available prompt examples.")
+             indices = list(range(len(self._few_shot_examples)))
+             random.shuffle(indices) # Shuffles based on seed set in setup()
+             selected_indices = indices[:self.n_shot]
+             self._few_shot_examples = [self._few_shot_examples[i] for i in selected_indices]
+
+    def load_resources(self):
+        self._load_model_and_tokenizer()
+        self._load_data()
+        self._load_prompt_examples()
 
 
-    def _build_prompt(self, question):
-        """Builds the full prompt for a given question."""
-        chat = [
-            {
-                "role": "system",
-                "content": """
-        Here are 8-shot examples for arithmetic reasoning:
+    def _build_gsm8k_prompt(self, question: str) -> str:
+        if self.is_chat_model:
+            chat = [
+                {
+                    "role": "system",
+                    "content": """Follow the examples to solve the math problem. Reason step-by-step and end your response with #### followed by the final numerical answer.
 
-        Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?
-        A: There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. #### 6
+                    Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?
+                    A: There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. #### 6
 
-        Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?
-        A: There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5. #### 5
+                    Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?
+                    A: There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5. #### 5
 
-        Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in total?
-        A: Originally, Leah had 32 chocolates. Her sister had 42. So in total they had 32 + 42 = 74. After eating 35, they had 74 - 35 = 39. #### 39
+                    Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in total?
+                    A: Originally, Leah had 32 chocolates. Her sister had 42. So in total they had 32 + 42 = 74. After eating 35, they had 74 - 35 = 39. #### 39
 
-        Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many lollipops did Jason give to Denny?
-        A: Jason started with 20 lollipops. Then he had 12 after giving some to Denny. So he gave Denny 20 - 12 = 8. #### 8
+                    Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many lollipops did Jason give to Denny?
+                    A: Jason started with 20 lollipops. Then he had 12 after giving some to Denny. So he gave Denny 20 - 12 = 8. #### 8
 
-        Q: Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys does he have now?
-        A: Shawn started with 5 toys. If he got 2 toys each from his mom and dad, then that is 4 more toys. 5 + 4 = 9. #### 9
+                    Q: Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys does he have now?
+                    A: Shawn started with 5 toys. If he got 2 toys each from his mom and dad, then that is 4 more toys. 5 + 4 = 9. #### 9
 
-        Q: There were nine computers in the server room. Five more computers were installed each day, from monday to thursday. How many computers are now in the server room?
-        A: There were originally 9 computers. For each of 4 days, 5 more computers were added. So 5 * 4 = 20 computers were added. 9 + 20 is 29. #### 29
+                    Q: There were nine computers in the server room. Five more computers were installed each day, from monday to thursday. How many computers are now in the server room?
+                    A: There were originally 9 computers. For each of 4 days, 5 more computers were added. So 5 * 4 = 20 computers were added. 9 + 20 is 29. #### 29
 
-        Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How many golf balls did he have at the end of wednesday?
-        A: Michael started with 58 golf balls. After losing 23 on tuesday, he had 58 - 23 = 35. After losing 2 more, he had 35 - 2 = 33 golf balls. #### 33
+                    Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How many golf balls did he have at the end of wednesday?
+                    A: Michael started with 58 golf balls. After losing 23 on tuesday, he had 58 - 23 = 35. After losing 2 more, he had 35 - 2 = 33 golf balls. #### 33
 
-        Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?
-        A: Olivia had 23 dollars. 5 bagels for 3 dollars each will be 5 x 3 = 15 dollars. So she has 23 - 15 dollars left. 23 - 15 is 8. #### 8
-        """
-            },
-            {
-                "role": "user",
-                "content":""
-            },
-        ]
-        qn = f"Given the following problem, reason and give a final answer to the problem.\nProblem: {question}\nYour response should end with \"The final answer is [answer]\" where [answer] is the response to the problem.\n"
-        chat[1]['content'] = qn
-        prompt_text = self.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+                    Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?
+                    A: Olivia had 23 dollars. 5 bagels for 3 dollars each will be 5 x 3 = 15 dollars. So she has 23 - 15 dollars left. 23 - 15 is 8. #### 8"""
+                },
+                {
+                    "role": "user",
+                    "content": f"Given the following problem, reason and give a final answer to the problem.\nProblem: {question}\nYour response should end with \"The final answer is [answer]\" where [answer] is the response to the problem.\n"
+                },
+            ]
+            prompt_text = self.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+        
+        else:
+            demo_text = ""
+            for ex in self._few_shot_examples:
+                demo_text += f"Q: {ex['question']}\nA: {ex['answer']}\n\n"
+
+            prompt_text = demo_text + f"Q: {question}\nA:"
         return prompt_text
-        # return self.demo_text + "Q: " + question + "\nA:"
-    
 
-    def _generate_single_sample(self, prompt_text):
-        """Generates exactly one completion for a given prompt."""
-        inputs = self.tokenizer(prompt_text, return_tensors="pt").to(self.model.device)
+    def _generate_completion(self, prompt_text: str) -> str:
+        inputs = self.tokenizer(prompt_text, return_tensors="pt", return_attention_mask=True).to(self.model.device)
         input_len_tokens = inputs.input_ids.shape[1]
 
-        # Stopping criteria uses configured sequences
         stop_criteria = StopSequenceCriteria(self.tokenizer, self.stop_sequences, input_len_tokens)
         stopping_criteria_list = StoppingCriteriaList([stop_criteria])
 
+        do_sample = self.temperature > 0.0
         gen_kwargs = {
             "input_ids": inputs.input_ids,
             "attention_mask": inputs.attention_mask,
-            "max_new_tokens": 512,
+            "max_new_tokens": self.max_new_tokens,
             "pad_token_id": self.tokenizer.pad_token_id,
             "stopping_criteria": stopping_criteria_list,
             "num_return_sequences": 1,
-            "do_sample": self.do_sample,
+            "do_sample": do_sample,
+            **({"temperature": self.temperature, "top_p": 0.95} if do_sample else {}),
         }
-        if self.do_sample:
-            gen_kwargs["temperature"] = self.temperature
-            gen_kwargs["top_p"] = 0.95
 
         with torch.no_grad():
             output_ids = self.model.generate(**gen_kwargs)
@@ -288,154 +255,166 @@ class GSM8KEvaluator(BaseEvaluator):
         generated_part_ids = output_ids[0, input_len_tokens:]
         response = self.tokenizer.decode(generated_part_ids, skip_special_tokens=True)
 
-        return response.strip() # Return single string
-    
-    @staticmethod
-    def extract_ground_truth_answer(answer_text):
-        """Extracts ground truth """
-        match = GROUND_TRUTH_RE.search(answer_text)
-        if match: 
-            return match.group(1).strip().replace(",", "")
-        else: 
-            return None
+        for stop_seq in self.stop_sequences:
+            if response.endswith(stop_seq):
+                response = response[:-len(stop_seq)]
+                break
+
+        return response.strip()
 
     @staticmethod
-    def _clean_extracted_number(num_str):
-        """Helper to clean common artifacts from extracted numbers."""
+    def _clean_extracted_number(num_str: Optional[str]) -> Optional[str]:
         if num_str is None: 
             return None
         cleaned = num_str.replace(",", "").replace("$", "").strip()
         if cleaned.endswith("."): 
             cleaned = cleaned[:-1]
-        if re.fullmatch(r"-?\d+\.?\d*", cleaned) or re.fullmatch(r"-?\d+", cleaned):
-             return cleaned
-        else: 
+        if re.fullmatch(r"-?\d+(\.\d+)?", cleaned):
+            return cleaned
+        else:
             return None
 
-    @classmethod
-    def extract_model_answer(cls, model_completion):
-        """Extracts the numerical answer from model output"""
-        if model_completion is None: 
+    @staticmethod
+    def extract_ground_truth_answer(answer_text: str) -> Optional[str]:
+        match = GROUND_TRUTH_RE.search(answer_text)
+        if match:
+            return GSM8KEvaluator._clean_extracted_number(match.group(1))
+        return None
+
+    @staticmethod
+    def extract_model_answer(model_completion: str) -> Optional[str]:
+        if model_completion is None:
             return None
+
+        if "####" in model_completion:
+            potential_ans = model_completion.split("####")[-1]
+            cleaned_num = GSM8KEvaluator._clean_extracted_number(potential_ans)
+            if cleaned_num is not None:
+                return cleaned_num
 
         potential_matches = MODEL_ANS_RE.findall(model_completion)
         if not potential_matches:
             return None
 
-        last_number_str = None
         for match_tuple in reversed(potential_matches):
             actual_match = next((m for m in match_tuple if m), None)
             if actual_match:
-                 cleaned_num = cls._clean_extracted_number(actual_match)
-                 if cleaned_num is not None:
-                      last_number_str = cleaned_num
-                      break
-        return last_number_str
-
+                cleaned_num = GSM8KEvaluator._clean_extracted_number(actual_match)
+                if cleaned_num is not None:
+                    return cleaned_num
+        return None
 
     @staticmethod
-    def is_correct(model_answer, ground_truth_answer):
-        """Compares answers, handles None."""
-        if ground_truth_answer is None or model_answer is None: 
+    def is_correct(model_answer: Optional[str], ground_truth_answer: Optional[str]) -> bool:
+        if ground_truth_answer is None: 
+            return False
+        if model_answer is None: 
             return False
         return model_answer == ground_truth_answer
 
-
-    # --- Evaluation Loop (Single Sample) ---
-
     def _perform_evaluation_loop(self):
-        """Generates samples and extracts answers, calculates metrics directly."""
         results_log = []
         num_correct = 0
         num_processed = 0
 
-        print("Evaluating samples...")
+        print(f"\nEvaluating {len(self.dataset)} samples...")
         for i, sample in enumerate(tqdm(self.dataset, desc="Evaluating Samples")):
-            question = sample["instruction"]
-            ground_truth_full = sample["output"]
-            extracted_ground_truth = self.extract_ground_truth_answer(ground_truth_full)
+            question = sample.get("instruction")
+            ground_truth_full = sample.get("output")
 
+            if not question or not ground_truth_full:
+                continue
+
+            extracted_ground_truth = self.extract_ground_truth_answer(ground_truth_full)
             if extracted_ground_truth is None:
-                 print(f"Warning: Skipping example {i} due to missing ground truth marker.")
-                 continue
+                results_log.append({
+                    "index": i, "question": question, "ground_truth_full": ground_truth_full,
+                    "extracted_ground_truth": None, "model_completion": "SKIPPED - GT MISSING",
+                    "extracted_model_answer": None, "is_correct": False,
+                    "error": "Ground truth marker not found or unparsable"
+                })
+                continue
 
             num_processed += 1
-            prompt_text = self._build_prompt(question)
-            # Generate single sample
-            model_completion = self._generate_single_sample(prompt_text)
-            # Extract answer 
+            prompt_text = self._build_gsm8k_prompt(question)
+            model_completion = self._generate_completion(prompt_text)
             extracted_answer = self.extract_model_answer(model_completion)
-
-            # Check whether answer is correct
             correct = self.is_correct(extracted_answer, extracted_ground_truth)
             if correct:
                 num_correct += 1
 
             results_log.append({
-                "index": i,
-                "question": question,
-                "ground_truth_full": ground_truth_full,
+                "index": i, "question": question, "ground_truth_full": ground_truth_full,
                 "extracted_ground_truth": extracted_ground_truth,
-                "model_completion": model_completion,
-                "extracted_model_answer": extracted_answer,
+                "model_completion": model_completion, "extracted_model_answer": extracted_answer,
                 "is_correct": correct,
             })
 
-            if self.debug and i < 3: # Debug print first few raw results
-                 print("-" * 20); print(f"--- Debug Example {i} ---")
-                 print(f"Q: {question}"); print(f"GT: {extracted_ground_truth}")
-                 print(f"Completion: {model_completion}")
-                 print(f"Extracted Ans: {extracted_answer}"); print(f"Correct: {correct}"); print("-" * 20)
+        if num_processed == 0:
+            print("ERROR: No samples were successfully processed.")
+            accuracy = 0.0
+        else:
+            accuracy = num_correct / num_processed
+            print(f"\nEvaluation Finished.")
+            print(f"Problems Processed: {num_processed}")
+            print(f"Correct Answers: {num_correct}")
+            print(f"Accuracy: {accuracy:.4f}")
 
-        accuracy = (num_correct / num_processed) if num_processed > 0 else 0.0
-        print(f"Evaluation Finished. Problems Processed: {num_processed}, Correct: {num_correct}, Accuracy: {accuracy:.4f}")
         return results_log, accuracy
 
+    def save_results(self, results_data: List[Dict], accuracy: float):
+        config = {
+            "model_name": self.model_name,
+            "model_path": self.model_path,
+            "data_path": self.data_path,
+            "temperature": self.temperature,
+            "stop_sequences": self.stop_sequences,
+            "seed": self.seed,
+            "max_new_tokens": self.max_new_tokens,
+        }
+        os.makedirs(self.output_path, exist_ok=True)
 
-    def save_results(self, results_data, accuracy):
-        """Saves detailed results and summary score."""
-        
-        results_path = os.path.join(self.output_path, f"{self.model_name}_results.jsonl")
+        results_filepath = os.path.join(self.output_path, f"{self.model_name}_results.jsonl")
         try:
-            with open(results_path, "w", encoding='utf-8') as f:
-                for result in results_data: f.write(json.dumps(result) + "\n")
-            print(f"Detailed results saved to {results_path}")
-        except IOError as e: print(f"ERROR: Failed to save detailed results: {e}")
+            with open(results_filepath, "w", encoding='utf-8') as f:
+                for result in results_data:
+                    f.write(json.dumps(result) + "\n")
+            print(f"Detailed results saved to {results_filepath}")
+        except IOError as e:
+            print(f"ERROR: Failed to save detailed results: {e}")
 
-        # Save summary score
-        score_path = os.path.join(self.output_path, f"scores_{self.model_name}.txt")
+        score_filepath = os.path.join(self.output_path, f"scores_{self.model_name}.txt")
+        num_processed = sum(1 for r in results_data if r.get("model_completion") != "SKIPPED - GT MISSING")
+        num_correct = sum(r['is_correct'] for r in results_data)
         try:
-            with open(score_path, "w", encoding='utf-8') as f:
-                f.write(f"Model: {self.model_name}\n")
-                f.write(f"Model Path: {self.model_path}\n")
-                f.write(f"Temperature: {self.temperature}\n")
-                f.write(f"Stop Sequences: {self.stop_sequences}\n")
-                f.write(f"N-Shot: {self.n_shot} (Hardcoded Prompts)\n")
-                f.write(f"CoT Prompting: {self.cot_flag}\n")
-                f.write(f"Total Problems Evaluated: {len(results_data)}\n")
-                f.write(f"Correct Answers: {sum(r['is_correct'] for r in results_data)}\n")
-                f.write(f"Accuracy: {accuracy:.4f}\n")
-            print(f"Summary scores saved to {score_path}")
-        except IOError as e: print(f"ERROR: Failed to save summary score: {e}")
+            with open(score_filepath, "w", encoding='utf-8') as f:
+                f.write(f"--- GSM8K Evaluation Summary ---\n")
+                f.write(f"Model Name: {config.get('model_name', 'N/A')}\n")
+                f.write(f"Model Path: {config.get('model_path', 'N/A')}\n")
+                f.write(f"Data Path: {config.get('data_path', 'N/A')}\n")
+                f.write(f"Temperature: {config.get('temperature', 'N/A')}\n")
+                f.write(f"Max New Tokens: {config.get('max_new_tokens', 'N/A')}\n")
+                f.write(f"Stop Sequences: {config.get('stop_sequences', 'N/A')}\n")
+                f.write(f"Prompt: Hardcoded 8-shot CoT (via chat template)\n")
+                f.write(f"Seed: {config.get('seed', 'N/A')}\n")
+                f.write(f"---------------------------------\n")
+                f.write(f"Total Problems Evaluated (Attempted): {len(results_data)}\n")
+                f.write(f"Problems Processed (Evaluable GT): {num_processed}\n")
+                f.write(f"Correct Answers: {num_correct}\n")
+                f.write(f"Accuracy (Correct / Processed): {accuracy:.4f}\n")
+                f.write(f"---------------------------------\n")
+            print(f"Summary scores saved to {score_filepath}")
+        except IOError as e:
+            print(f"ERROR: Failed to save summary score: {e}")
 
-
-    def _run_sync_evaluation(self):
-        """Synchronous wrapper: setup -> load -> evaluate -> save."""
+    def evaluate_model(self):
+        print(f"--- Starting GSM8K Evaluation for {self.model_name} ---")
         self.setup()
         self.load_resources()
         results, accuracy = self._perform_evaluation_loop()
         self.save_results(results, accuracy)
-        return accuracy
-
-    # --- Implementation of the abstract method ---
-    
-    def evaluate_model(self):
-        """Evaluate the model (single sample)."""
-        print(f"Starting evaluation task for {self.model_name}...")
-        accuracy = self._run_sync_evaluation()
-        print(f"Evaluation task completed for {self.model_name}. Accuracy: {accuracy:.4f}")
+        print(f"--- GSM8K Evaluation Complete for {self.model_name} ---")
         return None
-    
 
 # if __name__ == "__main__":
 #     evaluator = GSM8KEvaluator(model_path=r"C:\Users\lh\Documents\evaluations\meta-llama-Llama-3_2-3b", data_path=r"data\GSM8K\gsm8k_jsonl", output_path=r"output\GSM8K", prompt_path=r"prompt\GSM8K\gsm8k_prompt.jsonl")

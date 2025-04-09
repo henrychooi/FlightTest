@@ -26,18 +26,20 @@ def main(evaluator: str, **kwargs):
             )
             llm_evaluator.evaluate_model()
         case "gsm8k":
-                kwargs.setdefault("model_path", GSM8K_MODEL_DIR)
-                kwargs.setdefault("data_path", GSM8K_DATASET_DIR)
-                kwargs.setdefault("prompt_path", GSM8K_PROMPT_DIR)
-                kwargs.setdefault("output_path", GSM8K_OUTPUT_DIR)
+                is_chat_model_flag = not kwargs.get('base_model', False)
 
-            llm_evaluator = GSM8KEvaluator(
-                model_path=kwargs['model_path'],
-                data_path=kwargs['data_path'],
-                output_path=kwargs['output_path'],
-                prompt_path=kwargs.get('prompt_path')
-            )
-            llm_evaluator.evaluate_model()
+                llm_evaluator = GSM8KEvaluator(
+                    model_path=kwargs['model_path'],
+                    data_path=kwargs['data_path'],
+                    output_path=kwargs['output_path'],
+                    prompt_path=kwargs.get('prompt_path'),
+                    is_chat_model=is_chat_model_flag,
+                    temperature=kwargs.get('temperature', 0.0), 
+                    seed=kwargs.get('seed', 42),              
+                    n_shot=kwargs.get('n_shot', 8),             
+                    max_new_tokens=kwargs.get('max_new_tokens', 512)
+                )
+                llm_evaluator.evaluate_model()
 
         case "humaneval":
             # Check if evaluate_only is set
@@ -78,11 +80,18 @@ def main(evaluator: str, **kwargs):
             )
             llm_evaluator.evaluate_model()
 
+            is_chat_model_flag = not kwargs.get('base_model', False)
+
             llm_evaluator = GSM8KEvaluator(
                 model_path=kwargs['model_path'],
                 data_path=kwargs['data_path'],
                 output_path=kwargs['output_path'],
-                prompt_path=kwargs.get('prompt_path')
+                prompt_path=kwargs.get('prompt_path'),
+                is_chat_model=is_chat_model_flag,
+                temperature=kwargs.get('temperature', 0.0), 
+                seed=kwargs.get('seed', 42),              
+                n_shot=kwargs.get('n_shot', 8),             
+                max_new_tokens=kwargs.get('max_new_tokens', 512)
             )
             llm_evaluator.evaluate_model()
 
@@ -130,12 +139,10 @@ if __name__ == "__main__":
     parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval', 'all'])
 
 
+    parser.add_argument("--base_model", action='store_true', help="Set this flag if evaluating a base model (uses few-shot completion prompt). Default is to assume a chat model.")
     parser.add_argument("--n_shot", type=int, default=8, help="Number of few-shot examples (max 8).")
-    parser.add_argument("--cot_flag", action='store_true', default=True, help="Use CoT in few-shot prompts.")
-    parser.add_argument("--no_cot_flag", action='store_false', dest='cot_flag', help="Do NOT use CoT in few-shot prompts.")
     parser.add_argument('--temperature', type=float, default=0)
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-    parser.add_argument("--debug", action='store_true', help="Enable detailed debug printing.")
     args = parser.parse_args()
 
     kwargs = vars(args)
