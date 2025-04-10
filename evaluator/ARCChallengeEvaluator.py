@@ -9,7 +9,7 @@ from collections import Counter
 
 from .BaseEvaluator import BaseEvaluator
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from utils.ARCChallenge.utils import create_parquet_file, calculate_accuracy
+from utils.ARCChallenge.utils import calculate_accuracy
 
 
 class ARCChallengeEvaluator(BaseEvaluator):
