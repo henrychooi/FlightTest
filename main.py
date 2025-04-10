@@ -136,6 +136,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_samples', type=int, default=1, required=False, help="Number of samples to generate for the HumanEval benchmark. Defaults to 1 for pass@1 score.")
     parser.add_argument("--evaluate_only", action='store_true', help="Only runs the evaluation without generating samples. Requires a path to a sample file.")
     parser.add_argument('--sample_file', type=str, required=False, help="Path to the sample file for evaluation. Required if --evaluate_only is set.")
+    parser.add_argument('--debug', action='store_true', help="Set this flag to enable debug mode.")
     parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval', 'all'])
 
 
