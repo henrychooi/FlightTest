@@ -1,6 +1,7 @@
 from evaluator.MMLUEvaluator import MMLUEvaluator
 from evaluator.HumanEvalEvaluator import HumanEvalEvaluator
 from evaluator.GSM8KEvaluator import GSM8KEvaluator
+from evaluator.ARCChallengeEvaluator import ARCChallengeEvaluator
 from typing import Optional
 from utils.HumanEval.data import DATASET_DIR as HUMANEVAL_DATASET_DIR
 from utils.GSM8K.defaults import (
@@ -68,6 +69,13 @@ def main(evaluator: str, **kwargs):
                 sample_file=kwargs.get('sample_file', None)
             )
             llm_evaluator.evaluate_model()
+        case "arcchallenge":
+            evaluator = ARCChallengeEvaluator(
+                model_path=kwargs["model_path"], 
+                data_path=kwargs['data_path'], 
+                output_path=kwargs['output_path']
+            )
+            evaluator.evaluate_model()  
         case "all":
             llm_evaluator = MMLUEvaluator(
                 kwargs['model_path'], 
@@ -121,6 +129,13 @@ def main(evaluator: str, **kwargs):
                 sample_file=kwargs.get('sample_file', None)
             )
             llm_evaluator.evaluate_model()
+
+            evaluator = ARCChallengeEvaluator(
+                model_path=kwargs["model_path"], 
+                data_path=kwargs['data_path'], 
+                output_path=kwargs['output_path']
+            )
+            evaluator.evaluate_model()  
         case _: 
             raise ValueError("Error, unsupported type of evaluator")
 
@@ -136,7 +151,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_samples', type=int, default=1, required=False, help="Number of samples to generate for the HumanEval benchmark. Defaults to 1 for pass@1 score.")
     parser.add_argument("--evaluate_only", action='store_true', help="Only runs the evaluation without generating samples. Requires a path to a sample file.")
     parser.add_argument('--sample_file', type=str, required=False, help="Path to the sample file for evaluation. Required if --evaluate_only is set.")
-    parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval', 'all'])
+    parser.add_argument('--evaluator', type=str, required=True, choices=['mmlu', 'gsm8k', 'humaneval', 'arcchallenge', 'all'])
 
 
     parser.add_argument("--base_model", action='store_true', help="Set this flag if evaluating a base model (uses few-shot completion prompt). Default is to assume a chat model.")

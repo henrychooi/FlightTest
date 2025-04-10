@@ -34,7 +34,7 @@ class ARCChallengeEvaluator(BaseEvaluator):
         return device, model, tokenizer
     
     def _prep_df(self):
-        df = pd.read_parquet(self.data_path, engine='pyarrow')
+        df = pd.read_parquet(os.path.join(self.data_path, "test", "test-00000-of-00001.parquet"), engine='pyarrow')
         df['answerKey'] = df['answerKey'].astype('string')
         prompt_list = []
         answer_list = []
