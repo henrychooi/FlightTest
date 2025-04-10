@@ -5,14 +5,13 @@ This is a short documentation on the HumanEval benchmark. This benchmark consist
 The model is provided with a function template and a docstring, which includes examples. This is given as a prompt to the model, and the output is executed in a sandbox environment against multiple test cases.
 
 ## Results
-As of 7/4/2025:
+As of 10/4/2025:
 
-| Model           | pass@1 (%) | Reported pass@1 (%) | Diff (%) |
-|----------------|------------|----------------------|----------|
-| llama3.1:8b     | 61.5       | 72.6                 | -11.1    |
-| llama3.2:3b     | 52.3       | –                    | –        |
-| llama3.2:1b     | 33.1       | –                    | –        |
-
+| Model           | pass@1/10/100 (%) | Reported pass@1/10/100 (%) | Diff pass@1/10/100 (%) |
+|-----------------|-------------------|---------------------------|------------------------|
+| llama3.1:8b     | 61.5 / 0 / 0         | 72.6 / 0 / 0              | -11.1 / 0 / 0          |
+| llama3.2:3b     | 52.3 / 0 / 0         | – / – / –                 | – / – / –              |
+| llama3.2:1b     | 33.1 / 44.7 / 55.6         | – / – / –                 | – / – / –              |
 
 with hyperparameters
 
