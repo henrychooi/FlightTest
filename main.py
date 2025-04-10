@@ -69,6 +69,7 @@ def main(evaluator: str, **kwargs):
                 sample_file=kwargs.get('sample_file', None)
             )
             llm_evaluator.evaluate_model()
+
         case "arcchallenge":
             evaluator = ARCChallengeEvaluator(
                 model_path=kwargs["model_path"], 
@@ -76,6 +77,7 @@ def main(evaluator: str, **kwargs):
                 output_path=kwargs['output_path']
             )
             evaluator.evaluate_model()  
+            
         case "all":
             llm_evaluator = MMLUEvaluator(
                 kwargs['model_path'], 

@@ -7,7 +7,7 @@ from jinja2 import Template
 import pyarrow
 from collections import Counter
 
-from evaluator.BaseEvaluator import BaseEvaluator
+from .BaseEvaluator import BaseEvaluator
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from utils.ARCChallenge.utils import create_parquet_file, calculate_accuracy
 

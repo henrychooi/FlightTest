@@ -1,7 +1,9 @@
 import pandas as pd
 import pyarrow
 import copy
+import re
 from jinja2 import Template
+from collections import Counter
 
 def create_prompt_list(df):
     """
@@ -16,12 +18,6 @@ def create_prompt_list(df):
         prompt_list.append(rendered_prompt)
     return prompt_list
 
-def create_parquet_file(df, file_path):
-    """
-    Save the DataFrame to a parquet file.
-    """
-    df.to_parquet(file_path, engine='pyarrow', index=False)
-
 def calculate_accuracy(predictions, ground_truth):
     """
     Calculate the accuracy of the predictions against the ground truth.
@@ -30,3 +26,17 @@ def calculate_accuracy(predictions, ground_truth):
     accuracy = correct_predictions / len(ground_truth)
     return accuracy
 
+def obtain_answer(answer_string):
+    """
+    Extract the first alphanumeric character from the answer DataFrame.
+    """
+    answers = re.findall(r'The best answer is ([A-Da-d1-4])\.', answer_string)
+    most_common_item = Counter(answers).most_common(1)[0][0]
+    return most_common_item
+
+def create_n_shot_prompt(df):
+    answer_list = []
+    for index, row in df.iterrows():
+        answer = obtain_answer(row["answer"])
+        answer_list.append(answer)
+    return answer_list
