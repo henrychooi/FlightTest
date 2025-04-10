@@ -179,19 +179,19 @@ class HumanEvalEvaluator(BaseEvaluator):
         return sample_file
     
     def _write_results(self, pass_at_k, total_samples, correct_samples):
-        # Write results to a file
-        with open(os.path.join(self.output_path, "results.txt"), "w") as f:
-            f.write(strftime("%Y-%m-%d %H:%M:%S") + "\n")
-            f.write(f"Model: {self.model_path}\n")
-            f.write(f"Model type: {self.model_type}\n")
-            f.write(f"Data path: {self.data_path}\n")
-            f.write(f"Output path: {self.output_path}\n")
-            f.write(f"Temperature: 0.2\n")
-            f.write(f"Number of samples per problem: {self.num_samples}\n")
-            f.write(f"Total samples evaluated: {total_samples}\n")
-            f.write(f"Correct samples: {correct_samples}\n")
-            f.write(f"Pass@k: {pass_at_k}\n")
-        print(f"Benchmark complete! Results written to {os.path.join(self.output_path, 'results.txt')}")
+            # Write results to a file
+            with open(os.path.join(self.output_path, "results.txt"), "w") as f:
+                f.write(strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write(f"Model: {self.model_path}\n")
+                f.write(f"Model type: {self.model_type}\n")
+                f.write(f"Data path: {self.data_path}\n")
+                f.write(f"Output path: {self.output_path}\n")
+                f.write(f"Temperature: 0.2\n")
+                f.write(f"Number of samples per problem: {self.num_samples}\n")
+                f.write(f"Total samples evaluated: {total_samples * self.num_samples}\n")
+                f.write(f"Correct samples: {correct_samples}\n")
+                f.write(f"Pass@k: {pass_at_k}\n")
+            print(f"Benchmark complete! Results written to {os.path.join(self.output_path, os.path.basename(os.path.normpath(self.model_path)), '_pass@', self.num_samples, '_results.txt')}")
     
     def evaluate_model(self):
         if not self.evaluate_only:
