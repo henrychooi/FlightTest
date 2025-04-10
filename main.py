@@ -72,12 +72,15 @@ def main(evaluator: str, **kwargs):
 
         case "arcchallenge":
             evaluator = ARCChallengeEvaluator(
-                model_path=kwargs["model_path"], 
+                model_path=kwargs['model_path'], 
                 data_path=kwargs['data_path'], 
-                output_path=kwargs['output_path']
+                output_path=kwargs['output_path'],
+                n_shot=kwargs['n_shot'],
+                prompt_gen_seed=kwargs['prompt_gen_seed'],
+                seed=kwargs['seed']
             )
             evaluator.evaluate_model()  
-            
+
         case "all":
             llm_evaluator = MMLUEvaluator(
                 kwargs['model_path'], 
@@ -160,6 +163,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_shot", type=int, default=8, help="Number of few-shot examples (max 8).")
     parser.add_argument('--temperature', type=float, default=0)
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    parser.add_argument('--prompt_gen_seed', type=int, default=42, help="Random seed for prompt generation.")
     args = parser.parse_args()
 
     kwargs = vars(args)
