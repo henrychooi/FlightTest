@@ -1,0 +1,15 @@
+--- GSM8K Evaluation Summary ---
+Model Name: llama3.2-3b-base
+Model Path: D:\henryceptron\workspace\models\llama3.2-3b-base
+Data Path: C:\Users\lh\Documents\GitHub\FlightTest\data\GSM8K\gsm8k_jsonl
+Temperature: 0
+Max New Tokens: 512
+Stop Sequences: ['Q:', '</s>', '<|im_end|>', '<|start_header_id|>user<|end_header_id|>', '<|eot_id|>']
+Prompt: Hardcoded 8-shot CoT (via chat template)
+Seed: 42
+---------------------------------
+Total Problems Evaluated (Attempted): 1319
+Problems Processed (Evaluable GT): 1319
+Correct Answers: 388
+Accuracy (Correct / Processed): 0.2942
+---------------------------------
